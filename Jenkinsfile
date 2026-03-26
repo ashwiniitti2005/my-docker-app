@@ -2,11 +2,14 @@ pipeline {
     agent any
     
     environment {
-        // GitHub Container Registry
-        REGISTRY = 'ghcr.io'
-        GITHUB_USER = 'ashwiniitti2005'
-        IMAGE_NAME = 'myfile-image'
-        FULL_IMAGE_NAME = "${REGISTRY}/${GITHUB_USER}/${IMAGE_NAME}"
+        // DockerHub Configuration
+        REGISTRY = 'docker.io'  // DockerHub registry
+        DOCKERHUB_USER = 'ashwiniitti2005'  // Your DockerHub username
+        IMAGE_NAME = 'myfile-image'  // Your image name
+        FULL_IMAGE_NAME = "${DOCKERHUB_USER}/${IMAGE_NAME}"  // Format: username/imagename
+        
+        // Credentials ID in Jenkins
+        DOCKERHUB_CREDENTIALS = 'dockerhub-token'  // You'll create this in Jenkins
     }
     
     stages {
@@ -15,13 +18,9 @@ pipeline {
                 checkout scm
                 echo "✅ Code checked out from GitHub"
                 
-                // List files to verify
                 sh """
                     echo "Repository contents:"
                     ls -la
-                    echo ""
-                    echo "Dockerfile content:"
-                    cat Dockerfile || echo "Dockerfile not found"
                 """
             }
         }
@@ -31,7 +30,7 @@ pipeline {
                 script {
                     echo "🔨 Building Docker image: ${FULL_IMAGE_NAME}:${env.BUILD_ID}"
                     
-                    // Build Docker image using shell commands (not Docker plugin)
+                    // Build Docker image
                     sh """
                         docker build -t ${FULL_IMAGE_NAME}:${env.BUILD_ID} .
                         docker tag ${FULL_IMAGE_NAME}:${env.BUILD_ID} ${FULL_IMAGE_NAME}:latest
@@ -43,31 +42,31 @@ pipeline {
             }
         }
         
-        stage('Push to GitHub Container Registry') {
+        stage('Push to DockerHub') {
             steps {
                 script {
-                    echo "📤 Pushing to GitHub Container Registry..."
+                    echo "📤 Pushing to DockerHub..."
                     
-                    // Use withCredentials for authentication
+                    // Use credentials to push to DockerHub
                     withCredentials([usernamePassword(
-                        credentialsId: 'github-token',
-                        usernameVariable: 'GITHUB_USER',
-                        passwordVariable: 'GITHUB_TOKEN'
+                        credentialsId: 'dockerhub-token',  // Your Jenkins credentials ID
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASSWORD'
                     )]) {
                         sh """
-                            # Login to GitHub Container Registry
-                            echo ${GITHUB_TOKEN} | docker login ${REGISTRY} -u ${GITHUB_USER} --password-stdin
+                            # Login to DockerHub
+                            echo ${DOCKER_PASSWORD} | docker login -u ${DOCKER_USER} --password-stdin
                             
                             # Push the images
                             docker push ${FULL_IMAGE_NAME}:${env.BUILD_ID}
                             docker push ${FULL_IMAGE_NAME}:latest
                             
                             # Logout
-                            docker logout ${REGISTRY}
+                            docker logout
                         """
                     }
                     
-                    echo "✅ Successfully pushed to ${REGISTRY}"
+                    echo "✅ Successfully pushed to DockerHub!"
                 }
             }
         }
@@ -94,12 +93,13 @@ pipeline {
             ║              🎉 PIPELINE SUCCESSFUL! 🎉                  ║
             ╚══════════════════════════════════════════════════════════╝
             
-            📦 Image pushed: ${FULL_IMAGE_NAME}:${env.BUILD_ID}
-            🏷️  Latest tag: ${FULL_IMAGE_NAME}:latest
-            🔗 GitHub Packages: https://github.com/${GITHUB_USER}?tab=packages
+            📦 Image pushed to DockerHub: ${FULL_IMAGE_NAME}
+            🏷️  Tags: ${env.BUILD_ID} and latest
             
             📥 Pull command:
             docker pull ${FULL_IMAGE_NAME}:latest
+            
+            🔗 DockerHub URL: https://hub.docker.com/r/${FULL_IMAGE_NAME}
             """
         }
         failure {
